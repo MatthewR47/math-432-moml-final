@@ -1,4 +1,4 @@
-# GPS Tracking App
+# GPS Tracking
 
 This GPS tracking app is designed to evaluate positions based on satellite data using advanced mathematical techniques such as Least Squares and Singular Value Decomposition (SVD). The application aims to provide accurate location tracking by processing satellite signals.
 
