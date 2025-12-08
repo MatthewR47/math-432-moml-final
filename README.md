@@ -8,7 +8,7 @@ This GPS tracking app is designed to evaluate positions based on satellite data 
 - **SVD Method**: Implements a class for performing Singular Value Decomposition to enhance position evaluation.
 - **Interface**: The main application interface is via the command line.
 
-## Installation
+## Set-up 
 
 To get started with the GPS tracking app, follow these steps:
 
@@ -17,12 +17,4 @@ To get started with the GPS tracking app, follow these steps:
 2. Install the required dependencies:
    ```
    pip install -r requirements.txt
-   ```
-
-## Usage
-
-To run the GPS tracking app, execute the following command:
-
-```
-python src/main.py
-```
+   ``
