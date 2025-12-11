@@ -70,7 +70,7 @@ full_states = full_states.where("gnss_id", ("gps", "galileo"))
 
 
 ########################################################################################################################
-# Analysis: In the following section, we will compute the condition number for all combinations of 4 satellites
+# In the following section, we will compute the condition number for all combinations of 4 satellites
 # in this epoch (that don't have high time uncertainty).
 ########################################################################################################################
 
@@ -139,3 +139,18 @@ for group_num, selected_sats in enumerate(combinations(sat_ids, 4), 1):
 
     except Exception:
         pass
+
+########################################################################################################################
+# Analysis
+########################################################################################################################
+
+# TODO Calculate medians for condition_number, GDOP, and error
+
+
+# TODO Calculate what percentage of groups that had their condition variable above the median value also had their error above the median value
+
+
+# TODO Calculate what percentage of groups that had their GDOP above the median value also had their error above the median value
+
+
+# TODO Print out findings
