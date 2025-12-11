@@ -4,7 +4,9 @@
 import numpy as np
 import gnss_lib_py as glp
 import os
+from itertools import combinations
 import compute_conditional_value as ccv
+
 
 FILEPATH = os.path.join("..", "data", "gnss_log.txt")
 COMPARISON_EPOCH = 1383435830000.0
@@ -68,43 +70,72 @@ full_states = full_states.where("gnss_id", ("gps", "galileo"))
 
 
 ########################################################################################################################
-# Analysis Steps
+# Analysis: In the following section, we will compute the condition number for all combinations of 4 satellites
+# in this epoch (that don't have high time uncertainty).
 ########################################################################################################################
 
 # Pick Single Epoch to Analyze
 single_epoch = full_states.where("gps_millis", COMPARISON_EPOCH)
 
+# Get list of satellite IDs for this epoch and number of combinations possible
+sat_ids = np.unique(single_epoch["sv_id"])
+num_combinations = len(list(combinations(sat_ids, 4)))
+print(f"Total combinations of 4 satellites: {num_combinations}")
+
 # Calculate Weighted Least Squares position estimate
 wls_estimate = glp.solve_wls(single_epoch)
 
-print("WLS Position Estimate:")
-print(wls_estimate)
+# Prepare a receiver state for elevation/azimuth calculations
+receiver_state = glp.NavData()
+receiver_state["gps_millis"] = wls_estimate["gps_millis"]
+receiver_state["x_rx_wls_m"] = wls_estimate["x_rx_wls_m"]
+receiver_state["y_rx_wls_m"] = wls_estimate["y_rx_wls_m"]
+receiver_state["z_rx_wls_m"] = wls_estimate["z_rx_wls_m"]
 
-geodetic_estimate = pull_geodetic_from_wls(wls_estimate)
-error_distance = compute_distance_error(geodetic_estimate)
-print("Distance Error from Reference Position (m):", error_distance)
+results = []
 
+# Generate all possible combinations of 4 satellites
+for group_num, selected_sats in enumerate(combinations(sat_ids, 4), 1):
+    selected_sats = np.array(selected_sats)
 
-# Use this section to pick out which satellites to compare (maybe ones that are worse according to the SVD comparison)
-########################################################################################################################
-# Get list of satellite IDs for this epoch
-sat_ids = np.unique(single_epoch["sv_id"])
+    # Filter to selected satellites
+    subset = single_epoch.where("sv_id", selected_sats)
 
-# Example 1: Use only first 4 satellites (minimum needed)
-subset_4sats = single_epoch.where("sv_id", sat_ids[:4])
-wls_4sats = glp.solve_wls(subset_4sats)
-print("\nWLS with 4 satellites:")
-print(wls_4sats)
+    # Add elevation and azimuth data
+    subset_with_el_az = glp.add_el_az(subset, receiver_state, inplace=False)
 
-# Example 2: Use first 6 satellites
-subset_6sats = single_epoch.where("sv_id", sat_ids[:6])
-wls_6sats = glp.solve_wls(subset_6sats)
-print("\nWLS with 6 satellites:")
-print(wls_6sats)
+    # Add satellites to the ComputeConditionNumber object
+    ccn = ccv.ComputeConditionNumber()
+    for i in range(len(selected_sats)):
+        az = subset_with_el_az["az_sv_deg"][i]
+        el = subset_with_el_az["el_sv_deg"][i]
+        ccn.add_satellite(el, az)
 
-# Example 3: Manually pick specific satellites
-chosen_sats = [sat_ids[0], sat_ids[2], sat_ids[5], sat_ids[8]]  # pick any 4+
-subset_custom = single_epoch.where("sv_id", chosen_sats)
-wls_custom = glp.solve_wls(subset_custom)
-print("\nWLS with custom satellite selection:")
-print(wls_custom)
+    # Compute condition number and DOPs
+    # We need the try catch in case any of the combinations
+    # aren't linearly dependent
+    try:
+        condition_number = ccn.compute_condition_number()
+        HDOP, VDOP, PDOP, GDOP = ccn.compute_dops()
+
+        # Calculate WLS for this group
+        wls_result = glp.solve_wls(subset)
+        geodetic_result = pull_geodetic_from_wls(wls_result)
+        error = compute_distance_error(geodetic_result)
+
+        # Store results
+        results.append(
+            {
+                "group": group_num,
+                "satellites": selected_sats,
+                "condition_number": condition_number,
+                "HDOP": HDOP,
+                "VDOP": VDOP,
+                "PDOP": PDOP,
+                "GDOP": GDOP,
+                "error": error,
+            }
+        )
+
+    except Exception:
+        pass

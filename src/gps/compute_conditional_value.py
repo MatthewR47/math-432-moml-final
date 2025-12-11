@@ -36,7 +36,9 @@ class ComputeConditionNumber:
         sigma_min = float(S[-1])
 
         if sigma_min == 0.0:
-            raise ValueError("Geometry matrix is singular; condition number is infinite.")
+            raise ValueError(
+                "Geometry matrix is singular; condition number is infinite."
+            )
 
         return sigma_max / sigma_min
 
