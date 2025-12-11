@@ -1,13 +1,3 @@
-# GPS Tracking
-
-This GPS tracking app is designed to evaluate positions based on satellite data using advanced mathematical techniques such as Least Squares and Singular Value Decomposition (SVD). The application aims to provide accurate location tracking by processing satellite signals.
-
-## Features
-
-- **Least Squares Method**: Implements a class for performing least squares calculations to evaluate positions based on satellite data.
-- **SVD Method**: Implements a class for performing Singular Value Decomposition to enhance position evaluation.
-- **Interface**: The main application interface is via the command line.
-
 ## Set-up 
 
 To get started with the GPS tracking app, follow these steps:
