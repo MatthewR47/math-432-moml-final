@@ -209,3 +209,4 @@ __marimo__/
 
 # This will get downloaded during runtime 
 data/ephemeris
+src/data/*
