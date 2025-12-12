@@ -144,13 +144,39 @@ for group_num, selected_sats in enumerate(combinations(sat_ids, 4), 1):
 # Analysis
 ########################################################################################################################
 
-# TODO Calculate medians for condition_number, GDOP, and error
+condition_numbers = np.array([r["condition_number"] for r in results])
+gdops = np.array([r["GDOP"] for r in results])
+errors = np.array([r["error"] for r in results])
+
+# Calculate medians and standard deviation
+median_condition = np.median(condition_numbers)
+median_gdop = np.median(gdops)
+median_error = np.median(errors)
+std_error = np.std(errors)
+
+high_condition = condition_numbers > median_condition
+high_error = errors > median_error
+high_gdop = gdops > median_gdop
+
+# Get errors are greater than 1 standard devation above the median
+error_high_threshold = median_error + std_error
+errors_above_1std = errors > error_high_threshold
+condition_above_median = condition_numbers > median_condition
+
+# Calculate Trends
+percentage_high_condition_high_error = (np.sum(high_condition & high_error) / np.sum(high_condition) * 100)
+percentage_high_gdop_high_error = (np.sum(high_gdop & high_error) / np.sum(high_gdop) * 100)
+pct_high_error_high_condition = (np.sum(errors_above_1std & condition_above_median) / np.sum(errors_above_1std) * 100)
 
 
-# TODO Calculate what percentage of groups that had their condition variable above the median value also had their error above the median value
+print("\n")
+print(f"Median Condition Number: {median_condition:.2f}")
+print(f"Median GDOP: {median_gdop:.2f}")
+print(f"Median Error (m): {median_error:.2f}")
+print(f"Error Std Dev: {std_error:.3f}")
+print("\n")
+print(f"Percentage of groups with condition number > median that also had error > median: {percentage_high_condition_high_error:.2f}%")
+print(f"Percentage of groups with GDOP > median that also had error > median: {percentage_high_gdop_high_error:.2f}%")
+print(f"Percentage of groups with error > (median + 1σ) that also had condition number > median: {pct_high_error_high_condition:.2f}%")
+print("\n")
 
-
-# TODO Calculate what percentage of groups that had their GDOP above the median value also had their error above the median value
-
-
-# TODO Print out findings
