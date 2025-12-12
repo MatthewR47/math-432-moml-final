@@ -6,6 +6,7 @@ import gnss_lib_py as glp
 import os
 from itertools import combinations
 import compute_conditional_value as ccv
+import matplotlib.pyplot as plt
 
 
 FILEPATH = os.path.join("..", "data", "gnss_log.txt")
@@ -42,6 +43,26 @@ def pull_geodetic_from_wls(wls_result):
     longitude = wls_result["lon_rx_wls_deg"].item()
     altitude = wls_result["alt_rx_wls_m"].item()
     return [latitude, longitude, altitude]
+
+
+def plot_skyplot(az_el_list, title="Satellite Skyplot"):
+    """Plot a skyplot from a list of (az_deg, el_deg) pairs."""
+    az = np.radians([az for az, el in az_el_list])
+    r = [90 - el for az, el in az_el_list]
+
+    fig, ax = plt.subplots(subplot_kw={"projection": "polar"}, figsize=(5, 5))
+    ax.set_theta_zero_location("N")
+    ax.set_theta_direction(-1)
+    ax.scatter(az, r, s=80)
+
+    ax.set_ylim(90, 0)
+    ax.set_yticks([0, 30, 60, 90])
+    ax.set_yticklabels(["90°", "60°", "30°", "0°"])
+    ax.grid(True, linestyle=":", linewidth=0.7)
+    ax.set_title(title)
+
+    plt.tight_layout()
+    plt.show()
 
 
 ##########################################################################################################################
@@ -106,9 +127,16 @@ for group_num, selected_sats in enumerate(combinations(sat_ids, 4), 1):
 
     # Add satellites to the ComputeConditionNumber object
     ccn = ccv.ComputeConditionNumber()
+    elevation_list = []
+    azimuth_list = []
+    az_el = []
+
     for i in range(len(selected_sats)):
-        az = subset_with_el_az["az_sv_deg"][i]
-        el = subset_with_el_az["el_sv_deg"][i]
+        az = float(subset_with_el_az["az_sv_deg"][i])
+        el = float(subset_with_el_az["el_sv_deg"][i])
+        azimuth_list.append(az)
+        elevation_list.append(el)
+        az_el.append((az, el))
         ccn.add_satellite(el, az)
 
     # Compute condition number and DOPs
@@ -133,6 +161,9 @@ for group_num, selected_sats in enumerate(combinations(sat_ids, 4), 1):
                 "VDOP": VDOP,
                 "PDOP": PDOP,
                 "GDOP": GDOP,
+                "elevation_list": elevation_list,
+                "azimuth_list": azimuth_list,
+                "az_el": az_el,
                 "error": error,
             }
         )
@@ -144,9 +175,16 @@ for group_num, selected_sats in enumerate(combinations(sat_ids, 4), 1):
 # Analysis
 ########################################################################################################################
 
+
 condition_numbers = np.array([r["condition_number"] for r in results])
 gdops = np.array([r["GDOP"] for r in results])
 errors = np.array([r["error"] for r in results])
+
+best_result = min(results, key=lambda r: r["condition_number"])
+worst_result = max(results, key=lambda r: r["condition_number"])
+
+plot_skyplot(best_result["az_el"], title=f"Best 4-Satellite Geometry k-value={best_result['condition_number']}")
+plot_skyplot(worst_result["az_el"], title=f"Worst 4-Satellite Geometry k-value={worst_result['condition_number']}")
 
 # Calculate medians and standard deviation
 median_condition = np.median(condition_numbers)
@@ -167,16 +205,3 @@ condition_above_median = condition_numbers > median_condition
 percentage_high_condition_high_error = (np.sum(high_condition & high_error) / np.sum(high_condition) * 100)
 percentage_high_gdop_high_error = (np.sum(high_gdop & high_error) / np.sum(high_gdop) * 100)
 pct_high_error_high_condition = (np.sum(errors_above_1std & condition_above_median) / np.sum(errors_above_1std) * 100)
-
-
-print("\n")
-print(f"Median Condition Number: {median_condition:.2f}")
-print(f"Median GDOP: {median_gdop:.2f}")
-print(f"Median Error (m): {median_error:.2f}")
-print(f"Error Std Dev: {std_error:.3f}")
-print("\n")
-print(f"Percentage of groups with condition number > median that also had error > median: {percentage_high_condition_high_error:.2f}%")
-print(f"Percentage of groups with GDOP > median that also had error > median: {percentage_high_gdop_high_error:.2f}%")
-print(f"Percentage of groups with error > (median + 1σ) that also had condition number > median: {pct_high_error_high_condition:.2f}%")
-print("\n")
-
