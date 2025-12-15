@@ -1,13 +1,11 @@
 # This file was created with reference to the gnss_lib_py documentation here:
 # https://gnss-lib-py.readthedocs.io/en/stable/tutorials/parsers/tutorials_android_notebook.html
-
 import numpy as np
 import gnss_lib_py as glp
 import os
 from itertools import combinations
 import compute_conditional_value as ccv
 import matplotlib.pyplot as plt
-
 
 FILEPATH = os.path.join("..", "data", "gnss_log.txt")
 COMPARISON_EPOCH = 1383435830000.0
@@ -18,7 +16,6 @@ RAW_FIXES = glp.AndroidRawFixes(input_path=FILEPATH)
 # the reference position
 def compute_distance_error(geodetic):
     # Load the reference data for this log file
-
     # Get the fixed data points for the comparison epoch
     fixed_epoch = RAW_FIXES.where("gps_millis", COMPARISON_EPOCH)
     fixed_latitude = fixed_epoch["lat_rx_deg"].item()
@@ -33,8 +30,8 @@ def compute_distance_error(geodetic):
     ecef = glp.utils.coordinates.geodetic_to_ecef(geodetic_array)
 
     difference_vector = ecef - fixed_ecef
-
     error_distance = np.linalg.norm(difference_vector)
+
     return error_distance
 
 
@@ -45,8 +42,8 @@ def pull_geodetic_from_wls(wls_result):
     return [latitude, longitude, altitude]
 
 
-def plot_skyplot(az_el_list, title="Satellite Skyplot"):
-    """Plot a skyplot from a list of (az_deg, el_deg) pairs."""
+# Makes a plot showing where the satellites are when looking from above
+def plot_skyplot(az_el_list, title="Satellite Skyplot", sat_ids=None):
     az = np.radians([az for az, el in az_el_list])
     r = [90 - el for az, el in az_el_list]
 
@@ -54,20 +51,19 @@ def plot_skyplot(az_el_list, title="Satellite Skyplot"):
     ax.set_theta_zero_location("N")
     ax.set_theta_direction(-1)
     ax.scatter(az, r, s=80)
-
     ax.set_ylim(90, 0)
     ax.set_yticks([0, 30, 60, 90])
     ax.set_yticklabels(["90°", "60°", "30°", "0°"])
     ax.grid(True, linestyle=":", linewidth=0.7)
     ax.set_title(title)
-
     plt.tight_layout()
     plt.show()
 
 
-##########################################################################################################################
+######################################################################################################################
 # Preprocessing Steps
-##########################################################################################################################
+######################################################################################################################
+
 # Load raw data into the existing glp.AndroidRawGNSS class.
 # We are removing measurements that have a known high uncertainty in their time measurement.
 raw_data = glp.AndroidRawGnss(
@@ -81,7 +77,7 @@ raw_data = glp.AndroidRawGnss(
 # are and computes their positions in terms of x, y, and z coordinates)
 full_states = glp.add_sv_states(raw_data, source="precise", verbose=False)
 
-# This is where the sattelite clock bias is added
+# This is where the satellite clock bias is added
 # We know this from ephemeris data calculations so we might as well add it.
 # We will still solve for receiver clock bias later.
 full_states["corr_pr_m"] = full_states["raw_pr_m"] + full_states["b_sv_m"]
@@ -89,14 +85,14 @@ full_states["corr_pr_m"] = full_states["raw_pr_m"] + full_states["b_sv_m"]
 # This line filters to only GPS and Galileo satellites
 full_states = full_states.where("gnss_id", ("gps", "galileo"))
 
-
-########################################################################################################################
+######################################################################################################################
 # In the following section, we will compute the condition number for all combinations of 4 satellites
 # in this epoch (that don't have high time uncertainty).
-########################################################################################################################
+######################################################################################################################
 
 # Pick Single Epoch to Analyze
 single_epoch = full_states.where("gps_millis", COMPARISON_EPOCH)
+
 
 # Get list of satellite IDs for this epoch and number of combinations possible
 sat_ids = np.unique(single_epoch["sv_id"])
@@ -141,7 +137,7 @@ for group_num, selected_sats in enumerate(combinations(sat_ids, 4), 1):
 
     # Compute condition number and DOPs
     # We need the try catch in case any of the combinations
-    # aren't linearly dependent
+    # aren't linearly independent
     try:
         condition_number = ccn.compute_condition_number()
         HDOP, VDOP, PDOP, GDOP = ccn.compute_dops()
@@ -167,24 +163,16 @@ for group_num, selected_sats in enumerate(combinations(sat_ids, 4), 1):
                 "error": error,
             }
         )
-
     except Exception:
         pass
 
-########################################################################################################################
+######################################################################################################################
 # Analysis
-########################################################################################################################
-
+######################################################################################################################
 
 condition_numbers = np.array([r["condition_number"] for r in results])
 gdops = np.array([r["GDOP"] for r in results])
 errors = np.array([r["error"] for r in results])
-
-best_result = min(results, key=lambda r: r["condition_number"])
-worst_result = max(results, key=lambda r: r["condition_number"])
-
-plot_skyplot(best_result["az_el"], title=f"Best 4-Satellite Geometry k-value={best_result['condition_number']}")
-plot_skyplot(worst_result["az_el"], title=f"Worst 4-Satellite Geometry k-value={worst_result['condition_number']}")
 
 # Calculate medians and standard deviation
 median_condition = np.median(condition_numbers)
@@ -196,12 +184,53 @@ high_condition = condition_numbers > median_condition
 high_error = errors > median_error
 high_gdop = gdops > median_gdop
 
-# Get errors are greater than 1 standard devation above the median
+# Get errors are greater than 1 standard deviation above the median
 error_high_threshold = median_error + std_error
 errors_above_1std = errors > error_high_threshold
 condition_above_median = condition_numbers > median_condition
 
 # Calculate Trends
-percentage_high_condition_high_error = (np.sum(high_condition & high_error) / np.sum(high_condition) * 100)
-percentage_high_gdop_high_error = (np.sum(high_gdop & high_error) / np.sum(high_gdop) * 100)
-pct_high_error_high_condition = (np.sum(errors_above_1std & condition_above_median) / np.sum(errors_above_1std) * 100)
+percentage_high_condition_high_error = (
+    np.sum(high_condition & high_error) / np.sum(high_condition) * 100
+)
+percentage_high_gdop_high_error = (
+    np.sum(high_gdop & high_error) / np.sum(high_gdop) * 100
+)
+pct_high_error_high_condition = (
+    np.sum(errors_above_1std & condition_above_median) / np.sum(errors_above_1std) * 100
+)
+
+print("\n")
+print(f"Median Condition Number: {median_condition:.2f}")
+print(f"Median GDOP: {median_gdop:.2f}")
+print(f"Median Error (m): {median_error:.2f}")
+print(f"Error Std Dev: {std_error:.3f}")
+print("\n")
+print(
+    f"Percentage of groups with condition number > median that also had error > median: {percentage_high_condition_high_error:.2f}%"
+)
+print(
+    f"Percentage of groups with GDOP > median that also had error > median: {percentage_high_gdop_high_error:.2f}%"
+)
+print(
+    f"Percentage of groups with error > (median + 1σ) that also had condition number > median: {pct_high_error_high_condition:.2f}%"
+)
+print("\n")
+
+# Show plots of best and worst geometries
+best_result = min(results, key=lambda r: r["condition_number"])
+worst_result = max(results, key=lambda r: r["condition_number"])
+
+print("\n=== BEST GEOMETRY ===")
+plot_skyplot(
+    best_result["az_el"],
+    title=f"Best 4-Satellite Geometry k-value={best_result['condition_number']:.2f}",
+    sat_ids=best_result["satellites"],
+)
+
+print("\n=== WORST GEOMETRY ===")
+plot_skyplot(
+    worst_result["az_el"],
+    title=f"Worst 4-Satellite Geometry k-value={worst_result['condition_number']:.2f}",
+    sat_ids=worst_result["satellites"],
+)
