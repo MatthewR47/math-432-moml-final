@@ -70,7 +70,7 @@ raw_data = glp.AndroidRawGnss(
     input_path=FILEPATH,
     filter_measurements=True,
     measurement_filters={"sv_time_uncertainty": 500.0},
-    verbose=True,
+    verbose=False,
 )
 
 # Add satellite positions to data (this will download data describing where the satellites
@@ -96,7 +96,8 @@ single_epoch = full_states.where("gps_millis", COMPARISON_EPOCH)
 
 # Get list of satellite IDs for this epoch and number of combinations possible
 sat_ids = np.unique(single_epoch["sv_id"])
-print(f"Total Satellites: {len(sat_ids)}")
+num_satellites = len(sat_ids)
+print(f"Total Satellites: {num_satellites}")
 num_combinations = len(list(combinations(sat_ids, 4)))
 print(f"Total combinations of 4 satellites: {num_combinations}")
 
@@ -163,6 +164,72 @@ for group_num, selected_sats in enumerate(combinations(sat_ids, 4), 1):
     )
 
 ######################################################################################################################
+# In the following section we will compute the rank 4 approximation
+######################################################################################################################
+
+all_satellites_with_el_az = glp.add_el_az(single_epoch, receiver_state, inplace=False)
+
+receiver_position = np.array(
+    [
+        receiver_state["x_rx_wls_m"].item(),
+        receiver_state["y_rx_wls_m"].item(),
+        receiver_state["z_rx_wls_m"].item(),
+    ]
+)
+
+# Create a matrix that has dimensions number of satellites x 4 unknowns
+# This will be our overdetermined system matrix
+A = np.zeros((num_satellites, 4))
+for i in range(num_satellites):
+    satellite_position = np.array(
+        [
+            single_epoch["x_sv_m"][i],
+            single_epoch["y_sv_m"][i],
+            single_epoch["z_sv_m"][i],
+        ]
+    )
+
+    line_of_sight_vector = receiver_position - satellite_position
+    unit_los_vector = line_of_sight_vector / np.linalg.norm(line_of_sight_vector)
+
+    A[i, 0] = unit_los_vector[0]
+    A[i, 1] = unit_los_vector[1]
+    A[i, 2] = unit_los_vector[2]
+    A[i, 3] = 1
+
+U, S, Vt = np.linalg.svd(A, full_matrices=False)
+
+# Slice off the the top 4 for rank 4 approximation
+# Because our design matrix is already rank 4, this
+# doesn't actually take anything off.
+Rank_4_A = (U[:, :4] @ np.diag(S[:4])) @ Vt[:4, :]
+rank_4_A_cn = S[0] / S[3]
+
+# Error will be the same as we don't cut any data out
+all_sat_geodetic = pull_geodetic_from_wls(wls_estimate)
+all_sat_error = compute_distance_error(all_sat_geodetic)
+
+
+print(f"Rank 4 contition number {rank_4_A_cn:.2f}")
+print(f"Rank 4 error: {all_sat_error:.2f}")
+
+
+for pc in range(4):
+    print(f"\nPrincipal Component {pc + 1}:")
+    print(f"Singular value: {S[pc]:.3f}")
+
+    # Get the weights for this principal component
+    weights = U[:, pc]
+
+    # Find satellites contributing the most
+    abs_weights = np.abs(weights)
+    highest_contributors = np.argsort(abs_weights)[-4:][::-1]
+
+    print("Top contributing satellites:")
+    for idx in highest_contributors:
+        print(f"Satellite {sat_ids[idx]}: weight = {weights[idx]:+.3f}")
+
+######################################################################################################################
 # Analysis
 ######################################################################################################################
 
@@ -222,14 +289,14 @@ print("\n")
 best_result = min(results, key=lambda r: r["condition_number"])
 worst_result = max(results, key=lambda r: r["condition_number"])
 
-plot_skyplot(
-    best_result["az_el"],
-    title=f"Best 4-Satellite Geometry k-value={best_result['condition_number']:.2f}",
-    sat_ids=best_result["satellites"],
-)
+# plot_skyplot(
+#     best_result["az_el"],
+#     title=f"Best 4-Satellite Geometry k-value={best_result['condition_number']:.2f}",
+#     sat_ids=best_result["satellites"],
+# )
 
-plot_skyplot(
-    worst_result["az_el"],
-    title=f"Worst 4-Satellite Geometry k-value={worst_result['condition_number']:.2f}",
-    sat_ids=worst_result["satellites"],
-)
+# plot_skyplot(
+#     worst_result["az_el"],
+#     title=f"Worst 4-Satellite Geometry k-value={worst_result['condition_number']:.2f}",
+#     sat_ids=worst_result["satellites"],
+# )
