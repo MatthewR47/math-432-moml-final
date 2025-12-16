@@ -83,7 +83,7 @@ full_states = glp.add_sv_states(raw_data, source="precise", verbose=False)
 full_states["corr_pr_m"] = full_states["raw_pr_m"] + full_states["b_sv_m"]
 
 # This line filters to only GPS and Galileo satellites
-full_states = full_states.where("gnss_id", ("gps", "galileo"))
+full_states = full_states.where("gnss_id", ("gps"))
 
 ######################################################################################################################
 # In the following section, we will compute the condition number for all combinations of 4 satellites
@@ -96,6 +96,7 @@ single_epoch = full_states.where("gps_millis", COMPARISON_EPOCH)
 
 # Get list of satellite IDs for this epoch and number of combinations possible
 sat_ids = np.unique(single_epoch["sv_id"])
+print(f"Total Satellites: {len(sat_ids)}")
 num_combinations = len(list(combinations(sat_ids, 4)))
 print(f"Total combinations of 4 satellites: {num_combinations}")
 
@@ -174,20 +175,18 @@ condition_numbers = np.array([r["condition_number"] for r in results])
 gdops = np.array([r["GDOP"] for r in results])
 errors = np.array([r["error"] for r in results])
 
-# Calculate medians and standard deviation
+# Calculate medians and percentiles
 median_condition = np.median(condition_numbers)
 median_gdop = np.median(gdops)
 median_error = np.median(errors)
-std_error = np.std(errors)
+p75_error = np.percentile(errors, 75)
+p90_error = np.percentile(errors, 90)
 
 high_condition = condition_numbers > median_condition
 high_error = errors > median_error
 high_gdop = gdops > median_gdop
-
-# Get errors are greater than 1 standard deviation above the median
-error_high_threshold = median_error + std_error
-errors_above_1std = errors > error_high_threshold
-condition_above_median = condition_numbers > median_condition
+percentile_75_error = errors > p75_error
+percentile_90_error = errors > p90_error
 
 # Calculate Trends
 percentage_high_condition_high_error = (
@@ -196,15 +195,19 @@ percentage_high_condition_high_error = (
 percentage_high_gdop_high_error = (
     np.sum(high_gdop & high_error) / np.sum(high_gdop) * 100
 )
-pct_high_error_high_condition = (
-    np.sum(errors_above_1std & condition_above_median) / np.sum(errors_above_1std) * 100
+percentage_high_condition_given_75_error = (
+    np.sum(high_condition & percentile_75_error) / np.sum(percentile_75_error) * 100
+)
+percentage_high_condition_given_90_error = (
+    np.sum(high_condition & percentile_90_error) / np.sum(percentile_90_error) * 100
 )
 
 print("\n")
 print(f"Median Condition Number: {median_condition:.2f}")
 print(f"Median GDOP: {median_gdop:.2f}")
 print(f"Median Error (m): {median_error:.2f}")
-print(f"Error Std Dev: {std_error:.3f}")
+print(f"75th Percentile Error (m): {p75_error:.2f}")
+print(f"90th Percentile Error (m): {p90_error:.2f}")
 print("\n")
 print(
     f"Percentage of groups with condition number > median that also had error > median: {percentage_high_condition_high_error:.2f}%"
@@ -213,7 +216,10 @@ print(
     f"Percentage of groups with GDOP > median that also had error > median: {percentage_high_gdop_high_error:.2f}%"
 )
 print(
-    f"Percentage of groups with error > (median + 1σ) that also had condition number > median: {pct_high_error_high_condition:.2f}%"
+    f"Percentage of groups with error in the 75th percentile that also had condition number > median: {percentage_high_condition_given_75_error:.2f}%"
+)
+print(
+    f"Percentage of groups with error in the 90th percentile that also had condition number > median: {percentage_high_condition_given_90_error:.2f}%"
 )
 print("\n")
 
@@ -221,14 +227,12 @@ print("\n")
 best_result = min(results, key=lambda r: r["condition_number"])
 worst_result = max(results, key=lambda r: r["condition_number"])
 
-print("\n=== BEST GEOMETRY ===")
 plot_skyplot(
     best_result["az_el"],
     title=f"Best 4-Satellite Geometry k-value={best_result['condition_number']:.2f}",
     sat_ids=best_result["satellites"],
 )
 
-print("\n=== WORST GEOMETRY ===")
 plot_skyplot(
     worst_result["az_el"],
     title=f"Worst 4-Satellite Geometry k-value={worst_result['condition_number']:.2f}",
