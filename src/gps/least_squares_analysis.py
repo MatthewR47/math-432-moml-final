@@ -291,12 +291,12 @@ worst_result = max(results, key=lambda r: r["condition_number"])
 
 # plot_skyplot(
 #     best_result["az_el"],
-#     title=f"Best 4-Satellite Geometry k-value={best_result['condition_number']:.2f}",
+#     title=f"Best 4-Satellite Geometry k-value={best_result['condition_number']:.2f} Error (m)={best_result['error']:.2f}",
 #     sat_ids=best_result["satellites"],
 # )
 
 # plot_skyplot(
 #     worst_result["az_el"],
-#     title=f"Worst 4-Satellite Geometry k-value={worst_result['condition_number']:.2f}",
+#     title=f"Worst 4-Satellite Geometry k-value={worst_result['condition_number']:.2f} Error (m)={worst_result['error']:.2f}",
 #     sat_ids=worst_result["satellites"],
 # )
