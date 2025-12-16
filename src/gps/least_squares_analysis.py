@@ -137,35 +137,30 @@ for group_num, selected_sats in enumerate(combinations(sat_ids, 4), 1):
         ccn.add_satellite(el, az)
 
     # Compute condition number and DOPs
-    # We need the try catch in case any of the combinations
-    # aren't linearly independent
-    try:
-        condition_number = ccn.compute_condition_number()
-        HDOP, VDOP, PDOP, GDOP = ccn.compute_dops()
+    condition_number = ccn.compute_condition_number()
+    HDOP, VDOP, PDOP, GDOP = ccn.compute_dops()
 
-        # Calculate WLS for this group
-        wls_result = glp.solve_wls(subset)
-        geodetic_result = pull_geodetic_from_wls(wls_result)
-        error = compute_distance_error(geodetic_result)
+    # Calculate WLS for this group
+    wls_result = glp.solve_wls(subset)
+    geodetic_result = pull_geodetic_from_wls(wls_result)
+    error = compute_distance_error(geodetic_result)
 
-        # Store results
-        results.append(
-            {
-                "group": group_num,
-                "satellites": selected_sats,
-                "condition_number": condition_number,
-                "HDOP": HDOP,
-                "VDOP": VDOP,
-                "PDOP": PDOP,
-                "GDOP": GDOP,
-                "elevation_list": elevation_list,
-                "azimuth_list": azimuth_list,
-                "az_el": az_el,
-                "error": error,
-            }
-        )
-    except Exception:
-        pass
+    # Store results
+    results.append(
+        {
+            "group": group_num,
+            "satellites": selected_sats,
+            "condition_number": condition_number,
+            "HDOP": HDOP,
+            "VDOP": VDOP,
+            "PDOP": PDOP,
+            "GDOP": GDOP,
+            "elevation_list": elevation_list,
+            "azimuth_list": azimuth_list,
+            "az_el": az_el,
+            "error": error,
+        }
+    )
 
 ######################################################################################################################
 # Analysis
